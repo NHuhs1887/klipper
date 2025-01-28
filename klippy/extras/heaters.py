@@ -27,6 +27,7 @@ class Heater:
         # Setup sensor
         self.sensor = sensor
         self.passive = config.getboolean('passive', default=False)
+        self.cooldownRamp = config.getfloat('cooldowm_ramp', default=10.0)
         self.min_temp = config.getfloat('min_temp', minval=KELVIN_TO_CELSIUS)
         self.max_temp = config.getfloat('max_temp', above=self.min_temp)
         self.mb_register = config.getint('heater_register', 1)
@@ -75,6 +76,9 @@ class Heater:
         gcode = self.printer.lookup_object("gcode")
         gcode.register_mux_command("SET_HEATER_TEMPERATURE", "HEATER",
                                    short_name, self.cmd_SET_HEATER_TEMPERATURE,
+                                   desc=self.cmd_SET_HEATER_TEMPERATURE_help)
+        gcode.register_mux_command("HEATER_COOLDOWN", "HEATER",
+                                   short_name, self.cmd_SET_HEATER_COOLDOWN,
                                    desc=self.cmd_SET_HEATER_TEMPERATURE_help)
         self.printer.register_event_handler("klippy:shutdown",
                                             self._handle_shutdown)
@@ -191,6 +195,21 @@ class Heater:
         temp = gcmd.get_float('TARGET', 0.)
         pheaters = self.printer.lookup_object('heaters')
         pheaters.set_temperature(self, temp)
+    def cmd_SET_HEATER_COOLDOWN(self, gcmd):
+        cooldownRamp = gcmd.get_float('RAMP', 10.)
+        target_temp = gcmd.get_float('TEMP', 100.0)
+        wait = gcmd.get('WAIT', False)
+        pheaters = self.printer.lookup_object('heaters')
+        pheaters.cooldown(self, self.last_temp, target_temp, cooldownRamp, wait)
+        # reactor = self.printer.get_reactor()
+        # eventtime = reactor.monotonic()
+        # temp, target_temp = self.get_temp(eventtime)
+        # while(temp > 100.0):
+        #     (cooldownRamp / 60) * 5
+        #     temp = temp - (cooldownRamp / 60) * 5
+        #     pheaters.set_temperature(self, temp, wait= False)
+        #     eventtime = reactor.pause(eventtime + 5.)
+        #self.is_shutdown = True
 
 
 ######################################################################
@@ -420,6 +439,19 @@ class PrinterHeaters:
             print_time = toolhead.get_last_move_time()
             gcmd.respond_raw(self._get_temp(eventtime))
             eventtime = reactor.pause(eventtime + 1.)
+    def cooldown(self, heater, temp, target_temp, ramp, wait = False):
+        toolhead = self.printer.lookup_object('toolhead')
+        toolhead.register_lookahead_callback((lambda pt: None))
+        reactor = self.printer.get_reactor()
+        eventtime = reactor.monotonic()
+        while(temp > target_temp):
+            (ramp / 60) * 5
+            temp = temp - (ramp / 60) * 5
+            heater.set_temp(temp)
+            eventtime = reactor.pause(eventtime + 5.)
+            if wait and temp:
+                self._wait_for_temperature(heater)
+        heater.set_temp(0.0)
 
 def load_config(config):
     return PrinterHeaters(config)
