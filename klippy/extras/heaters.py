@@ -28,6 +28,7 @@ class Heater:
         self.sensor = sensor
         self.passive = config.getboolean('passive', default=False)
         self.cooldownRamp = config.getfloat('cooldowm_ramp', default=10.0)
+        self.tickle_duration = config.getfloat('tickle_duration', default=0)
         self.min_temp = config.getfloat('min_temp', minval=KELVIN_TO_CELSIUS)
         self.max_temp = config.getfloat('max_temp', above=self.min_temp)
         self.mb_register = config.getint('heater_register', 1)
@@ -64,6 +65,9 @@ class Heater:
             self.mcu_pwm = ppins.setup_pin('pwm', heater_pin)
             pwm_cycle_time = config.getfloat('pwm_cycle_time', 0.100, above=0.,
                                             maxval=self.pwm_delay)
+            tickle_pulse_width = config.getfloat('tickle_pulse_width', default=0)
+            if self.tickle_pulse_width > 0.:
+                self.tickle_value =  tickle_pulse_width / pwm_cycle_time
             self.mcu_pwm.setup_cycle_time(pwm_cycle_time)
             self.mcu_pwm.setup_max_duration(MAX_HEAT_TIME)
             # Load additional modules
@@ -101,8 +105,10 @@ class Heater:
     def set_pwm(self, read_time, value):
         if self.target_temp <= 0. or self.is_shutdown:
             value = 0.
+            if self.tickle_value > 0:
+                value = self.tickle_value
         if ((read_time < self.next_pwm_time or not self.last_pwm_value)
-            and abs(value - self.last_pwm_value) < 0.05):
+            and (abs(value - self.last_pwm_value) < 0.05) and not (value == self.tickle_value and self.last_pwm_value == 0.)):
             # No significant change in value - can suppress update
             return
         pwm_time = read_time + self.pwm_delay
