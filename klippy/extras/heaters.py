@@ -85,13 +85,24 @@ class Heater:
         self.printer.register_event_handler("klippy:disconnect",
                             self.close_connection)
     def connect_mb_device(self):
-        client = ModbusClient.ModbusTcpClient(
-            self.sensor.deviceIP,
+        # client = ModbusClient.ModbusTcpClient(
+        #     self.sensor.deviceIP,
+        #     port=self.sensor.port,
+        #     framer=FramerType.SOCKET,
+        #     timeout=10,
+        #     retries=3,
+        #     # source_address=("localhost", 0),
+        # )
+        client = ModbusClient.AsyncModbusSerialClient(
             port=self.sensor.port,
-            framer=FramerType.SOCKET,
-            timeout=10,
-            retries=3,
-            # source_address=("localhost", 0),
+            framer=FramerType.RTU,
+            # timeout=10,
+            # retries=3,
+            baudrate=9600,
+            bytesize=8,
+            parity="N",
+            stopbits=1,
+            # handle_local_echo=False,
         )
         client.connect()
         return client
