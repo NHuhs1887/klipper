@@ -18,7 +18,7 @@ from pymodbus import (
 KELVIN_TO_CELSIUS = -273.15
 
 
-class ModbusOfen:
+class EUC9526:
     def __init__(self, config, config_cmd=None):
         self.printer = config.get_printer()
         self._callback = None
@@ -31,9 +31,9 @@ class ModbusOfen:
                                         above=self.min_temp)
         self.min_sample_value = self.max_sample_value = 0
         self._report_clock = 0
-        self.deviceIP = config.get('IP', '127.0.0.1')
+        #self.deviceIP = config.get('IP', '127.0.0.1')
         self.register = config.getint('sensor_register', 1)
-        self.port = config.getint('port', 5020)
+        self.port = config.get('port', '/dev/ttyACM0')
         self.report_time = config.getfloat('report_time', 1,
                                            minval=1)
         self.sample_timer = self.reactor.register_timer(self.temperature_callback)
@@ -43,15 +43,24 @@ class ModbusOfen:
                                     self.close_connection)
         
     def connect_device(self):
-        self.client = ModbusClient.ModbusTcpClient(
-            self.deviceIP,
-            port=self.port,
-            framer=FramerType.SOCKET,
-            timeout=10,
-            retries=3,
-        )
-        self.client.connect()
+        if not self.client.connected():
+            self.client = ModbusClient.ModbusSerialClient(
+                port=self.port,
+                framer=FramerType.RTU,
+                # timeout=10,
+                # retries=3,
+                baudrate=9600,
+                bytesize=8,
+                parity="N",
+                stopbits=1,
+                # handle_local_echo=False,
+            )
+            self.client.connect()
+            if not self.client.connected():
+                raise self.printer.config_error(
+                    "Unable to connect to modbus device at %s" % (self.sensor.port,))
         self.reactor.update_timer(self.sample_timer, self.reactor.NOW)
+        
     def close_connection(self):
         self.client.close()
     def temperature_callback(self, eventtime):
@@ -81,7 +90,5 @@ class ModbusOfen:
 
 def load_config(config):
     # Register sensor
-    # pmbheaters = config.get_printer().load_object(config, "modbus_heaters")
-    # pmbheaters.add_sensor_factory("ModbusOfen", ModbusOfen)
     pheaters = config.get_printer().load_object(config, "heaters")
-    pheaters.add_sensor_factory("ModbusOfen", ModbusOfen)
+    pheaters.add_sensor_factory("EUC9526", EUC9526)

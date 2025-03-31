@@ -26,15 +26,17 @@ class Heater:
         self.short_name = short_name = self.name.split()[-1]
         # Setup sensor
         self.sensor = sensor
-        self.passive = config.getboolean('passive', default=False)
+        self.passive = config.getboolean('serial', default=False)
         self.cooldownRamp = config.getfloat('cooldowm_ramp', default=10.0)
         self.min_temp = config.getfloat('min_temp', minval=KELVIN_TO_CELSIUS)
         self.max_temp = config.getfloat('max_temp', above=self.min_temp)
         self.mb_register = config.getint('heater_register', 1)
         self.sensor.setup_minmax(self.min_temp, self.max_temp)
-        self.sensor.setup_callback(self.temperature_callback)
         if(self.passive == False):
             self.pwm_delay = self.sensor.get_report_time_delta()
+        self.sensor.setup_callback(self.temperature_callback)
+        # else:
+        #     self.sensor.setup_callback(self.sensor.temperature_callback)
         # Setup temperature checks
         self.min_extrude_temp = config.getfloat(
             'min_extrude_temp', 170.,
@@ -85,15 +87,7 @@ class Heater:
         self.printer.register_event_handler("klippy:disconnect",
                             self.close_connection)
     def connect_mb_device(self):
-        # client = ModbusClient.ModbusTcpClient(
-        #     self.sensor.deviceIP,
-        #     port=self.sensor.port,
-        #     framer=FramerType.SOCKET,
-        #     timeout=10,
-        #     retries=3,
-        #     # source_address=("localhost", 0),
-        # )
-        client = ModbusClient.AsyncModbusSerialClient(
+        self.sensor.client = ModbusClient.ModbusSerialClient(
             port=self.sensor.port,
             framer=FramerType.RTU,
             # timeout=10,
@@ -104,8 +98,12 @@ class Heater:
             stopbits=1,
             # handle_local_echo=False,
         )
-        client.connect()
-        return client
+        #client = self.sensor.client
+        self.sensor.client.connect()
+        if not self.sensor.client.connected():
+            raise self.printer.config_error(
+                "Unable to connect to modbus device at %s" % (self.sensor.port,))
+        return self.sensor.client
     def close_connection(self):
         if(self.passive == True):
             self.mbClient.close()
@@ -155,7 +153,8 @@ class Heater:
             if(self.passive == False):
                 self.target_temp = degrees
             else:
-                self.send_temp_update(degrees)
+                self.target_temp = degrees
+                self.send_temp_update(self.target_temp)
     def get_temp(self, eventtime):
         if(self.passive == False):
             print_time = self.mcu_pwm.get_mcu().estimated_print_time(eventtime) - 5.
