@@ -53,6 +53,8 @@ class Heater:
         # pwm caching
         self.next_pwm_time = 0.
         self.last_pwm_value = 0.
+        self.tickle_start_time = None
+        self.last_active = False
         if(self.passive == False):
 
             # Setup control algorithm sub-class
@@ -116,8 +118,20 @@ class Heater:
     def set_pwm(self, read_time, value):
         if self.target_temp <= 0. or self.is_shutdown:
             value = 0.
-            if self.tickle_value > 0:
-                value = self.tickle_value
+            # if self.tickle_value > 0:
+            #     value = self.tickle_value
+            self.tickle_start_time = None  # Reset tickle timer
+            self.last_active = False
+        else: # tickle for 2 seconds for the laser
+            if self.tickle_value > 0.:
+                if not self.last_active: # start tickle
+                    self.tickle_start_time = read_time
+                    self.last_active = True
+                if self.tickle_start_time is not None:
+                    if read_time - self.tickle_start_time < self.tickle_duration: # tickle phase
+                        value = self.tickle_value
+                    else: # tickle finished
+                        self-tickle_start_time = None
         if ((read_time < self.next_pwm_time or not self.last_pwm_value)
             and (abs(value - self.last_pwm_value) < 0.05) and not (value == self.tickle_value and self.last_pwm_value == 0.)):
             # No significant change in value - can suppress update
