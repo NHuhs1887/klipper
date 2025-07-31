@@ -100,7 +100,7 @@ class Heater:
         )
         #client = self.sensor.client
         self.sensor.client.connect()
-        if not self.sensor.client.connected():
+        if not self.sensor.client.connected:
             raise self.printer.config_error(
                 "Unable to connect to modbus device at %s" % (self.sensor.port,))
         return self.sensor.client

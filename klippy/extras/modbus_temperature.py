@@ -10,7 +10,7 @@ from . import bus
 import pymodbus.client as ModbusClient
 from pymodbus import (
     FramerType,
-    ModbusException
+    ModbusIOException
 )
 
 
@@ -32,7 +32,7 @@ class EUC9526:
         self.min_sample_value = self.max_sample_value = 0
         self._report_clock = 0
         #self.deviceIP = config.get('IP', '127.0.0.1')
-        self.register = config.getint('sensor_register', 1)
+        self.register = config.getint('sensor_register', 0)
         self.port = config.get('port', '/dev/ttyACM0')
         self.report_time = config.getfloat('report_time', 1,
                                            minval=1)
@@ -43,12 +43,12 @@ class EUC9526:
                                     self.close_connection)
         
     def connect_device(self):
-        if not self.client.connected():
+        if not self.client.connected:
             self.client = ModbusClient.ModbusSerialClient(
                 port=self.port,
                 framer=FramerType.RTU,
-                # timeout=10,
-                # retries=3,
+                timeout=10,
+                retries=3,
                 baudrate=9600,
                 bytesize=8,
                 parity="N",
@@ -65,10 +65,12 @@ class EUC9526:
         self.client.close()
     def temperature_callback(self, eventtime):
         try:
-            rr = self.client.read_holding_registers(self.register, 2, slave=1)
+            rr = self.client.read_input_registers(self.register, 2, slave=1)
+            if not hasattr(rr, 'registers'):
+                raise ModbusIOException("No registers in response")
             temp = rr.registers[0]
-            self.temp = temp
-        except ModbusException as exc:
+            self.temp = temp / 10.0
+        except ModbusIOException as exc:
             self.client.close()
             return self.reactor.NEVER
         measured_time = self.reactor.monotonic()
