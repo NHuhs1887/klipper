@@ -45,6 +45,7 @@ class Heater:
                          is not None)
         self.can_extrude = self.min_extrude_temp <= 0. or is_fileoutput
         self.max_power = config.getfloat('max_power', 1., above=0., maxval=1.)
+        self.min_power = config.getfloat('min_power', 0., above=0., maxval=1.)
         self.smooth_time = config.getfloat('smooth_time', 1., above=0.)
         self.inv_smooth_time = 1. / self.smooth_time
         self.is_shutdown = False
@@ -118,6 +119,7 @@ class Heater:
         self.next_pwm_time = pwm_time + 0.75 * MAX_HEAT_TIME
         self.last_pwm_value = value
         self.mcu_pwm.set_pwm(pwm_time, value)
+        return value
         #logging.debug("%s: pwm=%.3f@%.3f (from %.3f@%.3f [%.3f])",
         #              self.name, value, pwm_time,
         #              self.last_temp, self.last_temp_time, self.target_temp)
@@ -142,6 +144,8 @@ class Heater:
         return self.pwm_delay
     def get_max_power(self):
         return self.max_power
+    def get_min_power(self):
+        return self.min_power
     def get_smooth_time(self):
         return self.smooth_time
     def set_temp(self, degrees):
@@ -256,6 +260,7 @@ class ControlPID:
     def __init__(self, heater, config):
         self.heater = heater
         self.heater_max_power = heater.get_max_power()
+        self.heater_min_power = heater.get_min_power()
         self.Kp = config.getfloat('pid_Kp') / PID_PARAM_BASE
         self.Ki = config.getfloat('pid_Ki') / PID_PARAM_BASE
         self.Kd = config.getfloat('pid_Kd') / PID_PARAM_BASE
@@ -267,6 +272,8 @@ class ControlPID:
         self.prev_temp_time = 0.
         self.prev_temp_deriv = 0.
         self.prev_temp_integ = 0.
+        self.last_output = 0.0  # last actual applied power
+        self._sat_tol = 1e-9
     def temperature_update(self, read_time, temp, target_temp):
         time_diff = read_time - self.prev_temp_time
         # Calculate change of temperature
@@ -284,18 +291,35 @@ class ControlPID:
         co = self.Kp*temp_err + self.Ki*temp_integ - self.Kd*temp_deriv
         #logging.debug("pid: %f@%.3f -> diff=%f deriv=%f err=%f integ=%f co=%d",
         #    temp, read_time, temp_diff, temp_deriv, temp_err, temp_integ, co)
-        bounded_co = max(0., min(self.heater_max_power, co))
-        self.heater.set_pwm(read_time, bounded_co)
+        bounded_co = max(self.heater_min_power, min(self.heater_max_power, co))
+        # Only enforce min_power when heating is requested
+        if temp_err > 0 and 0. < bounded_co < self.heater_min_power:
+            bounded_co = self.heater_min_power
+        ret = self.heater.set_pwm(read_time, bounded_co)
+        if ret is not None:
+            try:
+                applied = float(ret)
+            except Exception:
+                applied = bounded_co
+        else:
+            # set_pwm suppressed an update; use the heater's cached last_pwm_value
+            applied = getattr(self.heater, 'last_pwm_value', bounded_co)
+        # Store last applied power
+        self.last_output = applied
+        #anti waindup
+        if abs(co - applied) <= self._sat_tol:
+            self.prev_temp_integ = temp_integ
         # Store state for next measurement
         self.prev_temp = temp
         self.prev_temp_time = read_time
         self.prev_temp_deriv = temp_deriv
-        if co == bounded_co:
-            self.prev_temp_integ = temp_integ
+        # if co == bounded_co:
+        #     self.prev_temp_integ = temp_integ
     def check_busy(self, eventtime, smoothed_temp, target_temp):
-        temp_diff = target_temp - smoothed_temp
+        was_actively_heating = getattr(self, 'last_output', 0.0) > (self.heater_min_power + 1e-9)
         return (abs(temp_diff) > PID_SETTLE_DELTA
-                or abs(self.prev_temp_deriv) > PID_SETTLE_SLOPE)
+                or abs(self.prev_temp_deriv) > PID_SETTLE_SLOPE
+                or was_actively_heating)
 
 
 ######################################################################
