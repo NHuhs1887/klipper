@@ -12,7 +12,7 @@ from . import bus
 # SensorBase
 ######################################################################
 
-REPORT_TIME = 0.03
+REPORT_TIME = 0.1
 MAX_INVALID_COUNT = 3
 
 class SensorBase:
