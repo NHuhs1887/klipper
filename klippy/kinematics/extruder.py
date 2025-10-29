@@ -141,6 +141,12 @@ class PrinterExtruder:
         pheaters = self.printer.load_object(config, 'heaters')
         gcode_id = 'T%d' % (extruder_num,)
         self.heater = pheaters.setup_heater(config, gcode_id)
+        # Setup decaoting pin
+        self.decoating_pin = None
+        decoating_pin = config.get('decoating_pin', None)
+        if decoating_pin is not None:
+            self.decoating_pin = self.printer.lookup_object('pins').setup_pin('digital_out', decoating_pin)
+            self.decoating_pin.setup_max_duration(0)
         # Setup kinematic checks
         self.nozzle_diameter = config.getfloat('nozzle_diameter', above=0.)
         filament_diameter = config.getfloat(
@@ -187,6 +193,13 @@ class PrinterExtruder:
                                    desc=self.cmd_ACTIVATE_EXTRUDER_help)
     def update_move_time(self, flush_time, clear_history_time):
         self.trapq_finalize_moves(self.trapq, flush_time, clear_history_time)
+        # if self.decoating_pin is not None:
+        #     # flush_time can be negative during connect; use a safe non-negative time
+        #     toolhead = self.printer.lookup_object('toolhead')
+        #     safe_time = flush_time if (flush_time is not None and flush_time >= 0.0) else toolhead.get_last_move_time()
+        #     if safe_time is None or safe_time < 0.0:
+        #         safe_time = 0.0
+        #     self.decoating_pin.set_digital(safe_time, 0)
     def get_status(self, eventtime):
         sts = self.heater.get_status(eventtime)
         sts['can_extrude'] = self.heater.can_extrude
@@ -241,6 +254,18 @@ class PrinterExtruder:
         can_pressure_advance = False
         if axis_r > 0. and (move.axes_d[0] or move.axes_d[1]):
             can_pressure_advance = True
+
+        if self.decoating_pin is not None:
+            # Only act on forward extrusion
+            if axis_r > 0:
+                # Set HIGH at the start
+                self.decoating_pin.set_digital(print_time, 1)
+                # Schedule a LOW at the end of the move
+                end_time = print_time + move.accel_t + move.cruise_t + move.decel_t
+                self.decoating_pin.set_digital(end_time, 0)
+            else:
+                # For retraction or idle: ensure pin is LOW at start
+                self.decoating_pin.set_digital(print_time, 0)
         # Queue movement (x is extruder movement, y is pressure advance flag)
         self.trapq_append(self.trapq, print_time,
                           move.accel_t, move.cruise_t, move.decel_t,

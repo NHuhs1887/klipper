@@ -316,6 +316,7 @@ class ControlPID:
         # if co == bounded_co:
         #     self.prev_temp_integ = temp_integ
     def check_busy(self, eventtime, smoothed_temp, target_temp):
+        temp_diff = target_temp - smoothed_temp
         was_actively_heating = getattr(self, 'last_output', 0.0) > (self.heater_min_power + 1e-9)
         return (abs(temp_diff) > PID_SETTLE_DELTA
                 or abs(self.prev_temp_deriv) > PID_SETTLE_SLOPE
