@@ -4,11 +4,11 @@
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
 import os, logging, threading
-import pymodbus.client as ModbusClient
-from pymodbus import (
-    FramerType,
-    ModbusException
-)
+# import pymodbus.client as ModbusClient
+# from pymodbus import (
+#     FramerType,
+#     ModbusException
+# )
 
 ######################################################################
 # Heater
@@ -26,14 +26,14 @@ class Heater:
         self.short_name = short_name = self.name.split()[-1]
         # Setup sensor
         self.sensor = sensor
-        self.passive = config.getboolean('serial', default=False)
+        #self.passive = config.getboolean('serial', default=False)
         self.cooldownRamp = config.getfloat('cooldowm_ramp', default=10.0)
         self.min_temp = config.getfloat('min_temp', minval=KELVIN_TO_CELSIUS)
         self.max_temp = config.getfloat('max_temp', above=self.min_temp)
         self.mb_register = config.getint('heater_register', 1)
         self.sensor.setup_minmax(self.min_temp, self.max_temp)
-        if(self.passive == False):
-            self.pwm_delay = self.sensor.get_report_time_delta()
+        #if(self.passive == False):
+        self.pwm_delay = self.sensor.get_report_time_delta()
         self.sensor.setup_callback(self.temperature_callback)
         # else:
         #     self.sensor.setup_callback(self.sensor.temperature_callback)
@@ -55,26 +55,26 @@ class Heater:
         # pwm caching
         self.next_pwm_time = 0.
         self.last_pwm_value = 0.
-        if(self.passive == False):
+        #if(self.passive == False):
 
-            # Setup control algorithm sub-class
-            algos = {'watermark': ControlBangBang, 'pid': ControlPID}
-            algo = config.getchoice('control', algos)
-            self.control = algo(self, config)
-            # Setup output heater pin
-            heater_pin = config.get('heater_pin')
-            ppins = self.printer.lookup_object('pins')
-            self.mcu_pwm = ppins.setup_pin('pwm', heater_pin)
-            pwm_cycle_time = config.getfloat('pwm_cycle_time', 0.100, above=0.,
-                                            maxval=self.pwm_delay)
-            self.mcu_pwm.setup_cycle_time(pwm_cycle_time)
-            self.mcu_pwm.setup_max_duration(MAX_HEAT_TIME)
-            # Load additional modules
-            self.printer.load_object(config, "verify_heater %s" % (short_name,))
-            self.printer.load_object(config, "pid_calibrate")
-        else:
+        # Setup control algorithm sub-class
+        algos = {'watermark': ControlBangBang, 'pid': ControlPID}
+        algo = config.getchoice('control', algos)
+        self.control = algo(self, config)
+        # Setup output heater pin
+        heater_pin = config.get('heater_pin')
+        ppins = self.printer.lookup_object('pins')
+        self.mcu_pwm = ppins.setup_pin('pwm', heater_pin)
+        pwm_cycle_time = config.getfloat('pwm_cycle_time', 0.100, above=0.,
+                                        maxval=self.pwm_delay)
+        self.mcu_pwm.setup_cycle_time(pwm_cycle_time)
+        self.mcu_pwm.setup_max_duration(MAX_HEAT_TIME)
+        # Load additional modules
+        self.printer.load_object(config, "verify_heater %s" % (short_name,))
+        self.printer.load_object(config, "pid_calibrate")
+        #else:
             #connect to Modbus device
-            self.mbClient = self.connect_mb_device()
+            #self.mbClient = self.connect_mb_device()
             
         gcode = self.printer.lookup_object("gcode")
         gcode.register_mux_command("SET_HEATER_TEMPERATURE", "HEATER",
@@ -85,29 +85,29 @@ class Heater:
                                    desc=self.cmd_SET_HEATER_TEMPERATURE_help)
         self.printer.register_event_handler("klippy:shutdown",
                                             self._handle_shutdown)
-        self.printer.register_event_handler("klippy:disconnect",
-                            self.close_connection)
-    def connect_mb_device(self):
-        self.sensor.client = ModbusClient.ModbusSerialClient(
-            port=self.sensor.port,
-            framer=FramerType.RTU,
-            # timeout=10,
-            # retries=3,
-            baudrate=9600,
-            bytesize=8,
-            parity="N",
-            stopbits=1,
-            # handle_local_echo=False,
-        )
-        #client = self.sensor.client
-        self.sensor.client.connect()
-        if not self.sensor.client.connected:
-            raise self.printer.config_error(
-                "Unable to connect to modbus device at %s" % (self.sensor.port,))
-        return self.sensor.client
-    def close_connection(self):
-        if(self.passive == True):
-            self.mbClient.close()
+        # self.printer.register_event_handler("klippy:disconnect",
+        #                     self.close_connection)
+    # def connect_mb_device(self):
+    #     self.sensor.client = ModbusClient.ModbusSerialClient(
+    #         port=self.sensor.port,
+    #         framer=FramerType.RTU,
+    #         # timeout=10,
+    #         # retries=3,
+    #         baudrate=9600,
+    #         bytesize=8,
+    #         parity="N",
+    #         stopbits=1,
+    #         # handle_local_echo=False,
+    #     )
+    #     #client = self.sensor.client
+    #     self.sensor.client.connect()
+    #     if not self.sensor.client.connected:
+    #         raise self.printer.config_error(
+    #             "Unable to connect to modbus device at %s" % (self.sensor.port,))
+    #     return self.sensor.client
+    # def close_connection(self):
+    #     if(self.passive == True):
+    #         self.mbClient.close()
     def set_pwm(self, read_time, value):
         if self.target_temp <= 0. or self.is_shutdown:
             value = 0.
@@ -128,8 +128,8 @@ class Heater:
             time_diff = read_time - self.last_temp_time
             self.last_temp = temp
             self.last_temp_time = read_time
-            if(self.passive == False):
-                self.control.temperature_update(read_time, temp, self.target_temp)
+            #if(self.passive == False):
+            self.control.temperature_update(read_time, temp, self.target_temp)
             temp_diff = temp - self.smoothed_temp
             adj_time = min(time_diff * self.inv_smooth_time, 1.)
             self.smoothed_temp += temp_diff * adj_time
@@ -154,27 +154,27 @@ class Heater:
                 "Requested temperature (%.1f) out of range (%.1f:%.1f)"
                 % (degrees, self.min_temp, self.max_temp))
         with self.lock:
-            if(self.passive == False):
-                self.target_temp = degrees
-            else:
-                self.target_temp = degrees
-                self.send_temp_update(self.target_temp)
+            #if(self.passive == False):
+            self.target_temp = degrees
+            # else:
+            #     self.target_temp = degrees
+            #     self.send_temp_update(self.target_temp)
     def get_temp(self, eventtime):
-        if(self.passive == False):
-            print_time = self.mcu_pwm.get_mcu().estimated_print_time(eventtime) - 5.
-        else:
-            print_time = eventtime
+        #if(self.passive == False):
+        print_time = self.mcu_pwm.get_mcu().estimated_print_time(eventtime) - 5.
+        # else:
+        #     print_time = eventtime
         with self.lock:
             if self.last_temp_time < print_time:
                 return 0., self.target_temp
             return self.smoothed_temp, self.target_temp
-    def send_temp_update(self, degrees):
-        try:
-            # See all calls in client_calls.py
-            #rr = await client.read_coils(1, 1, slave=1)
-            w = self.mbClient.write_register(self.mb_register, int(degrees), slave=1)
-        except: 
-            logging.error("Error sending data over modbus")
+    # def send_temp_update(self, degrees):
+    #     try:
+    #         # See all calls in client_calls.py
+    #         #rr = await client.read_coils(1, 1, slave=1)
+    #         w = self.mbClient.write_register(self.mb_register, int(degrees), slave=1)
+    #     except: 
+    #         logging.error("Error sending data over modbus")
     def check_busy(self, eventtime):
         with self.lock:
             return self.control.check_busy(
@@ -317,10 +317,10 @@ class ControlPID:
         #     self.prev_temp_integ = temp_integ
     def check_busy(self, eventtime, smoothed_temp, target_temp):
         temp_diff = target_temp - smoothed_temp
-        was_actively_heating = getattr(self, 'last_output', 0.0) > (self.heater_min_power + 1e-9)
+        #was_actively_heating = getattr(self, 'last_output', 0.0) > (self.heater_min_power + 1e-9)
         return (abs(temp_diff) > PID_SETTLE_DELTA
-                or abs(self.prev_temp_deriv) > PID_SETTLE_SLOPE
-                or was_actively_heating)
+                or abs(self.prev_temp_deriv) > PID_SETTLE_SLOPE)
+                #or was_actively_heating)
 
 
 ######################################################################
