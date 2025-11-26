@@ -104,6 +104,8 @@ class Heater:
         if not self.sensor.client.connected:
             raise self.printer.config_error(
                 "Unable to connect to modbus device at %s" % (self.sensor.port,))
+        else:
+            logging.info("Connected to modbus device at %s" % (self.sensor.port))
         return self.sensor.client
     def close_connection(self):
         if(self.passive == True):
@@ -160,6 +162,8 @@ class Heater:
                 self.target_temp = degrees
                 self.send_temp_update(self.target_temp)
     def get_temp(self, eventtime):
+        if self.passive:
+            return self.smoothed_temp or self.last_temp, self.target_temp
         if(self.passive == False):
             print_time = self.mcu_pwm.get_mcu().estimated_print_time(eventtime) - 5.
         else:
@@ -317,10 +321,11 @@ class ControlPID:
         #     self.prev_temp_integ = temp_integ
     def check_busy(self, eventtime, smoothed_temp, target_temp):
         temp_diff = target_temp - smoothed_temp
-        was_actively_heating = getattr(self, 'last_output', 0.0) > (self.heater_min_power + 1e-9)
+        #was_actively_heating = getattr(self, 'last_output', 0.0) > (self.heater_min_power + 1e-9)
         return (abs(temp_diff) > PID_SETTLE_DELTA
-                or abs(self.prev_temp_deriv) > PID_SETTLE_SLOPE
-                or was_actively_heating)
+                or abs(self.prev_temp_deriv) > PID_SETTLE_SLOPE)
+                
+                #or was_actively_heating)
 
 
 ######################################################################
@@ -469,6 +474,12 @@ class PrinterHeaters:
         eventtime = reactor.monotonic()
         while not self.printer.is_shutdown():
             temp, target = sensor.get_temp(eventtime)
+
+            gcmd.respond_info(
+                "DEBUG: %s current temp: %.2f | Target Range: [%.2f, %.2f]" % 
+                (sensor_name, temp, min_temp, max_temp)
+            )
+
             if temp >= min_temp and temp <= max_temp:
                 return
             print_time = toolhead.get_last_move_time()

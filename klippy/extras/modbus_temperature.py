@@ -10,7 +10,7 @@ from . import bus
 import pymodbus.client as ModbusClient
 from pymodbus import (
     FramerType,
-    ModbusIOException
+    ModbusException
 )
 
 
@@ -27,7 +27,7 @@ class EUC9526:
         self.temp = self.min_temp = self.max_temp = 0.0
         self.min_temp = config.getfloat('min_temp', KELVIN_TO_CELSIUS,
                                         minval=KELVIN_TO_CELSIUS)
-        self.max_temp = config.getfloat('max_temp', 99999999.9,
+        self.max_temp = config.getfloat('max_temp', 1500.0,
                                         above=self.min_temp)
         self.min_sample_value = self.max_sample_value = 0
         self._report_clock = 0
@@ -56,9 +56,11 @@ class EUC9526:
                 # handle_local_echo=False,
             )
             self.client.connect()
-            if not self.client.connected():
+            if not self.client.connected:
                 raise self.printer.config_error(
-                    "Unable to connect to modbus device at %s" % (self.sensor.port,))
+                    "Unable to connect to modbus device at %s" % (self.port))
+            else:
+                logging.info("Connected to modbus device at %s" % (self.port))
         self.reactor.update_timer(self.sample_timer, self.reactor.NOW)
         
     def close_connection(self):
@@ -67,11 +69,12 @@ class EUC9526:
         try:
             rr = self.client.read_input_registers(self.register, 2, slave=1)
             if not hasattr(rr, 'registers'):
-                raise ModbusIOException("No registers in response")
+                raise ModbusException("No registers in response")
             temp = rr.registers[0]
             self.temp = temp / 10.0
-        except ModbusIOException as exc:
+        except ModbusException as exc:
             self.client.close()
+            logging.info("Modbus exception: %s" % str(exc))
             return self.reactor.NEVER
         measured_time = self.reactor.monotonic()
         self._callback(measured_time, self.temp)
