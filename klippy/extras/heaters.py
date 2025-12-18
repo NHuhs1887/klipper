@@ -35,9 +35,6 @@ class Heater:
         if(self.passive == False):
             self.pwm_delay = self.sensor.get_report_time_delta()
         self.sensor.setup_callback(self.temperature_callback)
-        # else:
-        #     self.sensor.setup_callback(self.sensor.temperature_callback)
-        # Setup temperature checks
         self.min_extrude_temp = config.getfloat(
             'min_extrude_temp', 170.,
             minval=self.min_temp, maxval=self.max_temp)
@@ -176,7 +173,7 @@ class Heater:
         try:
             # See all calls in client_calls.py
             #rr = await client.read_coils(1, 1, slave=1)
-            w = self.mbClient.write_register(self.mb_register, int(degrees), slave=1)
+            w = self.mbClient.write_register(self.mb_register, int(degrees * 10), slave=1)
         except: 
             logging.error("Error sending data over modbus")
     def check_busy(self, eventtime):

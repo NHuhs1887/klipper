@@ -43,7 +43,7 @@ class EUC9526:
                                     self.close_connection)
         
     def connect_device(self):
-        if not self.client.connected:
+        if not self.client:
             self.client = ModbusClient.ModbusSerialClient(
                 port=self.port,
                 framer=FramerType.RTU,
