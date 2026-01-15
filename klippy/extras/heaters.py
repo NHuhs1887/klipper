@@ -488,7 +488,7 @@ class PrinterHeaters:
         reactor = self.printer.get_reactor()
         eventtime = reactor.monotonic()
         while(temp > target_temp):
-            (ramp / 60) * 5
+            #(ramp / 60) * 5
             temp = temp - (ramp / 60) * 5
             heater.set_temp(temp)
             eventtime = reactor.pause(eventtime + 5.)

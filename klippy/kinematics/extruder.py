@@ -255,17 +255,17 @@ class PrinterExtruder:
         if axis_r > 0. and (move.axes_d[0] or move.axes_d[1]):
             can_pressure_advance = True
 
+        self.decoating_state = 0 
+
+        # In the move() method:
         if self.decoating_pin is not None:
-            # Only act on forward extrusion
-            if axis_r > 0:
-                # Set HIGH at the start
-                self.decoating_pin.set_digital(print_time, 1)
-                # Schedule a LOW at the end of the move
-                end_time = print_time + move.accel_t + move.cruise_t + move.decel_t
-                self.decoating_pin.set_digital(end_time, 0)
-            else:
-                # For retraction or idle: ensure pin is LOW at start
-                self.decoating_pin.set_digital(print_time, 0)
+            # Determine if we SHOULD be decoating (forward extrusion)
+            new_state = 1 if axis_r > 0 else 0
+            
+            # Only send a command if the state is actually changing
+            if new_state != self.decoating_state:
+                self.decoating_pin.set_digital(print_time, new_state)
+                self.decoating_state = new_state
         # Queue movement (x is extruder movement, y is pressure advance flag)
         self.trapq_append(self.trapq, print_time,
                           move.accel_t, move.cruise_t, move.decel_t,
