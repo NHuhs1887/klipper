@@ -472,10 +472,10 @@ class PrinterHeaters:
         while not self.printer.is_shutdown():
             temp, target = sensor.get_temp(eventtime)
 
-            gcmd.respond_info(
-                "DEBUG: %s current temp: %.2f | Target Range: [%.2f, %.2f]" % 
-                (sensor_name, temp, min_temp, max_temp)
-            )
+            # gcmd.respond_info(
+            #     "DEBUG: %s current temp: %.2f | Target Range: [%.2f, %.2f]" % 
+            #     (sensor_name, temp, min_temp, max_temp)
+            # )
 
             if temp >= min_temp and temp <= max_temp:
                 return
